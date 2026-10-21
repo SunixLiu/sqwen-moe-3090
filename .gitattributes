@@ -1,0 +1,11 @@
+# Keep PowerShell scripts CRLF so they behave the same on every checkout.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+
+# Never touch binaries.
+*.dll binary
+*.exe binary
+*.lib binary
+*.gguf binary
+*.png binary
+*.jpg binary

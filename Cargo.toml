@@ -1,0 +1,27 @@
+[package]
+name = "sqwen"
+version = "0.1.0"
+edition = "2021"
+description = "Local inference engine for Qwen3.6-35B-A3B (qwen35moe): 168K-200K context on a single 24 GB GPU, with an OpenAI-compatible API"
+license = "MIT"
+readme = "README.md"
+keywords = ["llm", "inference", "gguf", "qwen", "cuda"]
+categories = ["science"]
+
+[dependencies]
+axum = "0.8"
+tokio = { version = "1", features = ["full"] }
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+minijinja = "2"
+regex = "1"
+tokenizers = "0.15"
+futures = "0.3"
+async-trait = "0.1"
+tokio-stream = "0.1"
+
+[dev-dependencies]
+rand = "0.8"
+bytemuck = "1"
