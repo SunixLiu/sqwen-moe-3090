@@ -1,0 +1,8 @@
+{# assets/chat_template.jinja — Qwen3.6-35B-A3B chat template v22.5 #}
+{# 从 E:\LLMModels\unsloth\qwen3.6-35B-A3B-Q4_K_m\chat_template_v22.5.jinja 复制 #}
+{% for message in messages %}
+{{ '<|' + message.role + '|>' }}
+{{ message.content }}
+<|end|>
+{% endfor %}
+<|assistant|>

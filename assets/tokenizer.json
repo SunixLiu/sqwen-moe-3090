@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": null,
+  "added_tokens": [
+    {"id": 0, "content": "<|begin_of_text|>", "special": true},
+    {"id": 1, "content": "<|end_of_text|>", "special": true}
+  ],
+  "model": {
+    "type": "BPE",
+    "dropout": 0.0,
+    "single_word": false,
+    "vocab_size": 10,
+    "merges": [],
+    "vocab": {
+      "Hello": 2,
+      ",": 3,
+      " world": 4,
+      "!": 5,
+      "Hi": 6,
+      " there": 7,
+      "How": 8,
+      " can": 9
+    }
+  }
+}

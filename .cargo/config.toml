@@ -1,0 +1,10 @@
+# .cargo/config.toml — Cargo 配置：设置 ggml 库链接路径
+#
+# 由于 Cargo 1.98.1 会丢弃 build.rs 中的 rustc-link-lib/rustc-link-search 指令，
+# 这里通过 RUSTFLAGS 传递 -L 标志来确保链接器能找到 ggml 库。
+#
+# 路径是**相对仓库根目录**的，因此 `cargo build` 需要在仓库根目录执行。
+# `build-ggml/` 由 `build_ggml.ps1` 生成（见 README 的 Build 一节）。
+
+[build]
+rustflags = ["-L", "build-ggml/lib/Release"]
