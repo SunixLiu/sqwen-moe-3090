@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sqwen — 单张 24 GB 显卡上的 Qwen3.6-35B-A3B 推理引擎</title><link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2046%2014%22%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%2238.5%22%20height%3D%2214%22%20fill%3D%22%23c99a4b%22/%3E%3Crect%20x%3D%2238.5%22%20y%3D%220%22%20width%3D%222.7%22%20height%3D%2214%22%20fill%3D%22%236f9a8b%22/%3E%3Crect%20x%3D%2241.2%22%20y%3D%220%22%20width%3D%223.6%22%20height%3D%2214%22%20fill%3D%22%233a3e45%22/%3E%3Crect%20x%3D%2244.8%22%20y%3D%220%22%20width%3D%221.2%22%20height%3D%2214%22%20fill%3D%22%232c2f35%22/%3E%3C/svg%3E">
+
+<meta name="description" content="sqwen 只针对 qwen35moe 架构族：整模型常驻单张 24 GB 显卡，172K–200K 上下文，OpenAI 兼容 HTTP API。把 24 GB 显存榨到位。">
+
+<!-- 自托管字体（本地 woff2） -->
+<style id="local-fonts">
+@font-face { font-family: "Bricolage Grotesque"; src: url("fonts/BricolageGrotesque-var.woff2") format("woff2"); font-weight: 200 800; font-style: normal; }
+@font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-var.woff2") format("woff2"); font-weight: 400 800; font-style: normal; }
+@font-face { font-family: "Noto Sans SC"; src: url("fonts/NotoSansSC-subset-400.woff2") format("woff2"); font-weight: 400; font-style: normal; }
+@font-face { font-family: "Noto Sans SC"; src: url("fonts/NotoSansSC-subset-500.woff2") format("woff2"); font-weight: 500; font-style: normal; }
+@font-face { font-family: "Noto Sans SC"; src: url("fonts/NotoSansSC-subset-700.woff2") format("woff2"); font-weight: 700; font-style: normal; }
+</style>
+
+<style>
+:root {
+  --canvas: #15171b;
+  --ink: #e9e4d8;
+  --ink-dim: #9a948a;
+  --ink-faint: #8a857c;
+  --rule: #2c2f35;
+  --weights: #c99a4b;
+  --kv: #6f9a8b;
+  --runtime: #3a3e45;
+  --driver: #2c2f35;
+  --free: #1d2025;
+  --accent: #e8b23e;
+  --warn: #d97b4a;
+  --display: "Bricolage Grotesque", "Noto Sans SC", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, monospace;
+  --body: "Noto Sans SC", "Bricolage Grotesque", sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 16px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--accent); color: #15171b; }
+
+a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
+a:hover, a:focus-visible { border-bottom-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 32px; }
+
+/* ---------- header ---------- */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 26px 0 22px;
+  border-bottom: 1px solid var(--rule);
+}
+.brand { display: flex; align-items: center; gap: 14px; }
+.brand .mark { display: block; }
+.wordmark {
+  font-family: var(--display); font-weight: 800; font-size: 24px;
+  letter-spacing: -0.5px; color: var(--ink);
+}
+nav { display: flex; gap: 22px; font-size: 14px; }
+nav a { color: var(--ink-dim); font-family: var(--body); }
+nav a:hover, nav a:focus-visible { color: var(--ink); border-bottom-color: transparent; }
+
+/* ---------- ledger (hero) ---------- */
+#ledger { padding: 64px 0 56px; }
+
+.lede { max-width: 780px; }
+.lede p { font-size: 17px; color: var(--ink); margin-bottom: 10px; }
+.lede .claim {
+  font-family: var(--display); font-weight: 600; font-size: 21px;
+  color: var(--ink); margin-top: 18px; line-height: 1.5;
+}
+.lede .claim em { font-style: normal; color: var(--accent); }
+
+/* memory bar */
+.membar-block { margin-top: 44px; }
+.membar-label-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 10px;
+}
+.membar-title { font-family: var(--mono); font-size: 13px; color: var(--ink-dim); letter-spacing: 0.4px; }
+.membar-total { font-family: var(--mono); font-size: 13px; color: var(--ink-faint); }
+
+.membar {
+  display: flex; width: 100%; height: 56px;
+  border: 1px solid var(--rule);
+  background: var(--free);
+}
+.seg { height: 100%; position: relative; transition: width 140ms ease-out; min-width: 2px; }
+.seg-weights { background: var(--weights); }
+.seg-kv { background: var(--kv); }
+.seg-runtime { background: var(--runtime); }
+.seg-driver { background: var(--driver); }
+.seg-free { background: var(--free); }
+.seg .seg-tag {
+  position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+  font-family: var(--mono); font-size: 11px; color: #15171b;
+  white-space: nowrap; overflow: hidden; max-width: calc(100% - 16px);
+  text-overflow: ellipsis;
+}
+
+.membar-legend { display: flex; gap: 18px; margin-top: 10px; font-family: var(--mono); font-size: 12px; color: var(--ink-dim); flex-wrap: wrap; }
+.membar-legend .dot { display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: -1px; }
+
+/* slider + readouts */
+.slider-row { display: flex; align-items: center; gap: 28px; margin-top: 34px; flex-wrap: wrap; }
+.slider-cell { flex: 1 1 340px; }
+.slider-head { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 13px; color: var(--ink-dim); margin-bottom: 8px; }
+input[type="range"] {
+  width: 100%; height: 26px; appearance: none; -webkit-appearance: none;
+  background: transparent; cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; background: var(--rule); }
+input[type="range"]::-moz-range-track { height: 4px; background: var(--rule); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 18px; height: 18px; margin-top: -7px;
+  background: var(--accent); border: none;
+}
+input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; background: var(--accent); border: none; border-radius: 0; }
+
+.readouts { display: flex; gap: 34px; flex-wrap: wrap; }
+.readout .ro-label { font-family: var(--mono); font-size: 12px; color: var(--ink-dim); letter-spacing: 0.3px; }
+.readout .ro-value { font-family: var(--mono); font-weight: 700; font-size: 30px; color: var(--ink); line-height: 1.25; margin-top: 2px; }
+.readout .ro-value small { font-size: 15px; font-weight: 500; color: var(--ink-dim); }
+
+.caution {
+  margin-top: 22px; font-size: 14px; color: var(--warn);
+  border-left: 3px solid var(--warn); padding: 8px 0 8px 14px;
+  max-width: 720px;
+}
+.caution[hidden] { display: none; }
+
+.derived-note { margin-top: 26px; font-size: 12.5px; color: var(--ink-faint); max-width: 780px; }
+
+/* ---------- sections ---------- */
+section.block { padding: 56px 0; border-top: 1px solid var(--rule); }
+.sec-kicker { font-family: var(--mono); font-size: 13px; color: var(--accent); letter-spacing: 0.6px; margin-bottom: 10px; }
+h2 {
+  font-family: var(--display); font-weight: 600;
+  font-size: clamp(26px, 3.4vw, 36px); line-height: 1.25;
+  letter-spacing: -0.4px; margin-bottom: 18px; max-width: 760px;
+}
+.prose { max-width: 780px; color: var(--ink); margin-bottom: 14px; }
+.prose code { font-family: var(--mono); font-size: 0.9em; color: var(--accent); }
+
+/* tables as ledger rows */
+table.ledger { width: 100%; border-collapse: collapse; margin: 26px 0; }
+table.ledger th {
+  font-family: var(--mono); font-size: 12px; font-weight: 500;
+  color: var(--ink-dim); text-align: left; padding: 8px 12px;
+  border-bottom: 1px solid var(--rule); letter-spacing: 0.4px; line-height: 1.45;
+}
+table.ledger td {
+  font-family: var(--mono); font-size: 14px; color: var(--ink);
+  padding: 9px 12px; border-bottom: 1px solid var(--rule); line-height: 1.45;
+}
+table.ledger tr:last-child td { border-bottom: none; }
+table.ledger .num { text-align: right; }
+table.ledger .dim { color: var(--ink-dim); }
+table.ledger .hot { color: var(--accent); font-weight: 700; }
+
+.note { font-size: 13.5px; color: var(--ink-dim); max-width: 780px; margin-top: 6px; }
+
+/* code block */
+pre.cmd {
+  font-family: var(--mono); font-size: 13px; line-height: 1.6;
+  background: #101216; border: 1px solid var(--rule);
+  padding: 18px 20px; overflow-x: auto; margin: 24px 0;
+  color: #d8d3c8;
+}
+pre.cmd .c { color: var(--ink-faint); }
+
+/* limits list — semantic, no markers */
+ul.limits { list-style: none; max-width: 780px; margin-top: 8px; }
+ul.limits li {
+  padding: 10px 0; border-bottom: 1px solid var(--rule);
+  font-size: 15px; color: var(--ink);
+}
+ul.limits li:last-child { border-bottom: none; }
+ul.limits li b { font-weight: 500; color: var(--ink-dim); font-family: var(--mono); font-size: 0.92em; margin-right: 10px; }
+
+/* download */
+#download .dl-row { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; margin-top: 8px; }
+.btn {
+  display: inline-block; font-family: var(--display); font-weight: 600;
+  font-size: 17px; color: #15171b; background: var(--accent);
+  padding: 14px 26px; border-radius: 2px; text-decoration: none;
+}
+.btn:hover, .btn:focus-visible { background: #f2c153; border-bottom-color: transparent; }
+.dl-meta { font-family: var(--mono); font-size: 13px; color: var(--ink-dim); line-height: 1.6; }
+
+footer {
+  border-top: 1px solid var(--rule); padding: 26px 0 40px;
+  display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  font-size: 13.5px; color: var(--ink-dim);
+}
+footer .links { display: flex; gap: 18px; }
+
+/* reveal motion */
+.reveal { opacity: 0; transform: translateY(8px); transition: opacity 300ms ease-out, transform 300ms ease-out; }
+.reveal.in { opacity: 1; transform: none; }
+
+.nowrap { white-space: nowrap; }
+
+@media (max-width: 380px) {
+  #ledger { padding-top: 20px; }
+  .lede p { font-size: 14.5px; margin-bottom: 8px; }
+  .lede .claim { margin-top: 12px; }
+  .membar-block { margin-top: 24px; }
+  .membar { height: 40px; }
+  .membar-label-row { margin-bottom: 6px; }
+  .slider-head { margin-bottom: 4px; }
+}
+@media (max-width: 720px) {
+  nav { display: none; }
+  .wrap { padding: 0 20px; }
+  #ledger { padding-top: 44px; }
+  .readout .ro-value { font-size: 24px; }
+  table.ledger td, table.ledger th { padding: 8px 8px; font-size: 13px; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+<header>
+  <div class="brand">
+    <!-- bespoke mark: the 24 GiB ledger as a glyph -->
+    <svg class="mark" width="46" height="14" viewBox="0 0 46 14" aria-hidden="true">
+      <rect x="0" y="0" width="38.5" height="14" fill="#c99a4b"/>
+      <rect x="38.5" y="0" width="2.7" height="14" fill="#6f9a8b"/>
+      <rect x="41.2" y="0" width="3.6" height="14" fill="#3a3e45"/>
+      <rect x="44.8" y="0" width="1.2" height="14" fill="#2c2f35"/>
+    </svg>
+    <span class="wordmark">sqwen</span>
+  </div>
+  <nav aria-label="页面导航">
+    <a href="#ledger">显存台账</a>
+    <a href="#math">上下文成本</a>
+    <a href="#measure">测量</a>
+    <a href="#api">接口</a>
+    <a href="#limits">取舍</a>
+    <a href="#download">下载</a>
+  </nav>
+</header>
+
+<!-- ============ 1. 显存台账 ============ -->
+<section id="ledger" aria-label="显存台账">
+  <div class="lede reveal">
+    <p>sqwen 只针对 <code>qwen35moe</code> 一个架构族：Gated DeltaNet 线性注意力 + 全注意力 + MoE。整模型（Q4_K_M，20.2 GiB）常驻单张 24 GB 显卡，对外是 OpenAI 兼容的 HTTP API。</p>
+    <p class="claim">它不是 llama.cpp 的平替。<em>它把 24 GB 显存榨到位。</em></p>
+  </div>
+
+  <div class="membar-block reveal">
+    <div class="membar-label-row">
+      <span class="membar-title">RTX 3090 · 24 GiB <span class="nowrap">显存分配</span></span>
+      <span class="membar-total">24,576 MiB</span>
+    </div>
+    <div class="membar" role="img" aria-label="24 GiB 显存分配条形图：权重、KV cache、运行时开销、驱动保留、空闲">
+      <div class="seg seg-weights" id="seg-weights"><span class="seg-tag" id="tag-weights"></span></div>
+      <div class="seg seg-kv" id="seg-kv"></div>
+      <div class="seg seg-runtime" id="seg-runtime"></div>
+      <div class="seg seg-driver" id="seg-driver"></div>
+      <div class="seg seg-free" id="seg-free"></div>
+    </div>
+    <div class="membar-legend">
+      <span><span class="dot" style="background:var(--weights)"></span>权重 20.2 GiB（固定）</span>
+      <span><span class="dot" style="background:var(--kv)"></span>KV cache（随上下文增长）</span>
+      <span><span class="dot" style="background:var(--runtime)"></span>运行时开销</span>
+      <span><span class="dot" style="background:var(--driver)"></span>驱动保留</span>
+      <span><span class="dot" style="background:var(--free);border:1px solid var(--rule)"></span>空闲</span>
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-cell">
+        <div class="slider-head">
+          <label for="ctx">上下文长度 -c</label>
+          <span id="ctx-val">172,032 tokens</span>
+        </div>
+        <input type="range" id="ctx" min="32768" max="200000" step="any" value="172032"
+               aria-label="上下文长度，单位 token，范围 32K 到 200K">
+      </div>
+      <div class="readouts" role="status" aria-live="polite">
+        <div class="readout">
+          <div class="ro-label">KV CACHE</div>
+          <div class="ro-value"><span id="ro-kv">0.92</span><small> GiB</small></div>
+        </div>
+        <div class="readout">
+          <div class="ro-label">空闲显存</div>
+          <div class="ro-value"><span id="ro-free">530</span><small> MiB</small></div>
+        </div>
+        <div class="readout">
+          <div class="ro-label">172K → 200K 速度差</div>
+          <div class="ro-value">−0.4<small> %</small></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="caution" id="caution" hidden>
+      空闲低于 ~500 MiB 后，再开任何 GPU 程序就会触发 WDDM 分页，速度断崖式下跌。这是 README 里的原话警告：-c 200000 能装下，但只剩 ~380 MiB。
+    </p>
+
+    <p class="derived-note">
+      注：运行时开销（~2.0 GiB）与驱动保留（~370 MiB）两段是按 README 两个锚点（172K → 余 ~530 MiB；200K → 余 ~380 MiB）反推的近似值；权重与 KV 为文档原值（KV = token 数 × 5.6 KiB）。
+    </p>
+  </div>
+</section>
+
+<!-- ============ 2. 上下文成本 ============ -->
+<section id="math" class="block" aria-label="上下文为什么几乎不花钱">
+  <div class="reveal">
+    <p class="sec-kicker">01 · 上下文成本</p>
+    <h2>上下文为什么几乎不花钱</h2>
+    <p class="prose">KV cache 用 q4_0 量化，K/V 都是，只覆盖 10 个全注意力层：每 token 占 5.6 KiB。GDN 线性注意力层的状态是固定大小，不随序列增长。所以 <code>-c</code> 从 172K 拉到 200K，速度只慢 0.4%。</p>
+    <p class="prose">一句话：<strong>上下文吃的是显存，不是算力。</strong></p>
+  </div>
+  <table class="ledger reveal" aria-label="不同上下文长度下的 KV cache 与空闲显存">
+    <thead><tr><th>上下文 -c</th><th class="num">KV cache</th><th class="num">空闲显存</th></tr></thead>
+    <tbody>
+      <tr><td>32,768</td><td class="num">179 MiB</td><td class="num">1,292 MiB</td></tr>
+      <tr><td>65,536</td><td class="num">358 MiB</td><td class="num">1,113 MiB</td></tr>
+      <tr><td>131,072</td><td class="num">717 MiB</td><td class="num">754 MiB</td></tr>
+      <tr><td>172,032</td><td class="num hot">941 MiB</td><td class="num">~530 MiB</td></tr>
+      <tr><td>200,000</td><td class="num">1,094 MiB</td><td class="num">~380 MiB</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============ 3. 测量 ============ -->
+<section id="measure" class="block" aria-label="测量">
+  <div class="reveal">
+    <p class="sec-kicker">02 · 测量</p>
+    <h2>投机解码：更深是净亏</h2>
+    <p class="prose">MTP 头自带起草能力。直觉上草稿越长越赚，实测相反：一个草稿 token 的边际成本 ≈ 一次完整 decode 的 60%（校验要多读它激活的专家权重），而接受率随位置衰减（pos0≈0.9，pos1≈0.7）。同机 greedy、ABBA 交替：</p>
+  </div>
+  <table class="ledger reveal" aria-label="每步草稿数与 decode 吞吐">
+    <thead><tr><th>每步草稿</th><th class="num">decode</th></tr></thead>
+    <tbody>
+      <tr><td>0（不投机）</td><td class="num">125–130 t/s</td></tr>
+      <tr><td>1</td><td class="num hot">145–147 t/s</td></tr>
+      <tr><td>2</td><td class="num">125 t/s</td></tr>
+      <tr><td>3</td><td class="num dim">106 t/s</td></tr>
+    </tbody>
+  </table>
+  <div class="reveal">
+    <p class="prose">最优点就是<strong>每步 1 个草稿</strong>。引擎在线实测「0 / 1」两种模式并锁定胜者（<code>--spec-adaptive</code>，默认开），而不是靠拍参数：每个候选取 5 轮样本，跳过前 32 步（约 45 token）后才探测，按吞吐中位数比较。</p>
+  </div>
+
+  <div class="reveal" style="margin-top:44px">
+    <h2 style="font-size:clamp(22px,2.6vw,28px)">对 llama.cpp：ABBA 台账</h2>
+    <p class="prose">同机、同会话、两边 <code>ggml-cuda.dll</code> 完全相同、ABBA 交叉、都走 HTTP server、greedy、生成 1200 token：</p>
+  </div>
+  <table class="ledger reveal" aria-label="sqwen 与 llama.cpp 对照">
+    <thead><tr><th>项目</th><th class="num">sqwen</th><th class="num">llama.cpp</th><th class="num">比值</th></tr></thead>
+    <tbody>
+      <tr><td>Decode，MTP（每步 1 草稿）</td><td class="num">137 t/s</td><td class="num">151 t/s</td><td class="num dim">对方快 1.10×</td></tr>
+      <tr><td>Prefill pp512</td><td class="num">~3,000 t/s</td><td class="num">~3,200 t/s</td><td class="num dim">对方快 ~5%</td></tr>
+      <tr><td>启动（纯加载）</td><td class="num hot">12.3 s</td><td class="num">19.2 s</td><td class="num dim">—</td></tr>
+      <tr><td>172K 上下文显存</td><td class="num hot">23,676 MiB</td><td class="num">24,083 MiB</td><td class="num dim">—</td></tr>
+    </tbody>
+  </table>
+  <p class="note reveal">测量纪律：跨会话的绝对值会漂 ±5%，只有同会话、同 DLL 的 A/B 才可信。decode 落后 ~10%，prefill 打平，显存更省；投机解码对两边收益相当（各 ~+7%），差距没有被投机放大。</p>
+</section>
+
+<!-- ============ 4. 接口 ============ -->
+<section id="api" class="block" aria-label="接口">
+  <div class="reveal">
+    <p class="sec-kicker">03 · 接口</p>
+    <h2>OpenAI 兼容端点</h2>
+  </div>
+  <table class="ledger reveal" aria-label="HTTP 端点列表">
+    <thead><tr><th>端点</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>POST /v1/chat/completions</td><td class="dim">OpenAI 兼容；流式 + 非流式，tool calling</td></tr>
+      <tr><td>GET /v1/models · GET /health</td><td class="dim">列模型 / 就绪检查（端口在模型预热完成后才绑定）</td></tr>
+      <tr><td>GET /</td><td class="dim">内置 WebUI</td></tr>
+      <tr><td>POST /v1/bench</td><td class="dim">快速跑分端点</td></tr>
+    </tbody>
+  </table>
+  <div class="reveal">
+    <p class="prose"><strong>Tool calling</strong>：工具定义渲染进 chat template，生成后从文本里抽 <code>tool_call</code>——与 llama.cpp 同一条路线。流式下工具调用在最后一个分片整块发出，支持多轮 <code>role: "tool"</code> 结果。</p>
+    <p class="prose"><strong>Prompt cache</strong>：前缀复用 + GDN 状态检查点。多轮对话首字延迟约好 11 倍。</p>
+  </div>
+  <pre class="cmd reveal" aria-label="实际在用的 server 启动命令">sqwen.exe server "E:\models\BigBang-v1.i1-Q4_K_M.gguf" \
+  --port 8100 -c 172032 -b 2048 -u 512 -t 8 \
+  --template "E:\models\chat_template_v22.5.jinja" \
+  --spec-type draft-mtp \
+  --temp 0.1 --top-k 40 --top-p 0.95 --min-p 0.05 \
+  --repeat-penalty 1.08 --repeat-last-n 128 \
+  --reasoning on --reasoning-effort medium --reasoning-budget 2048 \
+  --reasoning-format deepseek --queue-capacity 8
+<span class="c"># --repeat-penalty 1.08 --repeat-last-n 128 不要省：默认 1.0 等于关闭，
+# 配低温度时模型一旦开始复读就自己停不下来（agent 场景表现为"卡住"）</span></pre>
+</section>
+
+<!-- ============ 5. 取舍 ============ -->
+<section id="limits" class="block" aria-label="有意的取舍">
+  <div class="reveal">
+    <p class="sec-kicker">04 · 取舍</p>
+    <h2>都是有意的取舍</h2>
+    <ul class="limits">
+      <li><b>串行</b>请求完全串行（单引擎）；超过 --queue-capacity 返回 429。</li>
+      <li><b>参数</b>不支持 stop、n&gt;1、logprobs、response_format、JSON Schema 约束解码。</li>
+      <li><b>tool_choice</b>"required" 和指定函数名不强制，只尊重 "none"。</li>
+      <li><b>工具 JSON</b>偶尔带未转义引号：服务端修常见形态，修不好就回退成正文，而不是发出坏调用。</li>
+      <li><b>平台</b>Windows 构建（MSVC + CUDA 12.5），其它平台未验证。</li>
+      <li><b>范围</b>只支持 qwen35moe 一个架构族；早期项目，不是 llama.cpp 的平替。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 6. 下载 ============ -->
+<section id="download" class="block" aria-label="下载">
+  <div class="reveal">
+    <p class="sec-kicker">05 · 下载</p>
+    <h2>v0.1.1</h2>
+    <div class="dl-row">
+      <a class="btn" href="https://github.com/SunixLiu/sqwen-moe-3090/releases/download/v0.1.1/sqwen-v0.1.1-windows-x64.zip">下载 v0.1.1 · Windows x64</a>
+      <span class="dl-meta">73.5 MB zip：exe + 4 个 ggml DLL + cudart + QUICKSTART.txt<br>解压即用 · MIT 许可</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <span>sqwen · 单张 24 GB 显卡上的 Qwen3.6-35B-A3B 推理引擎</span>
+  <span class="links">
+    <a href="https://github.com/SunixLiu/sqwen-moe-3090">GitHub 仓库</a>
+    <a href="https://github.com/SunixLiu/sqwen-moe-3090/blob/main/README.zh-CN.md">中文文档</a>
+    <a href="https://github.com/SunixLiu/sqwen-moe-3090/blob/main/LICENSE">MIT</a>
+  </span>
+</footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---- ledger model (MiB) ---- */
+  var TOTAL = 24576;
+  var WEIGHTS = 20694;      // 20.2 GiB, fixed
+  var RUNTIME = 2041;       // derived from README anchors
+  var DRIVER = 370;         // derived from README anchors
+  var KV_PER_TOKEN_KIB = 5.6;
+
+  function kvMiB(c) { return c * KV_PER_TOKEN_KIB / 1024; }
+  function freeMiB(c) { return TOTAL - WEIGHTS - RUNTIME - DRIVER - kvMiB(c); }
+
+  var slider = document.getElementById("ctx");
+  var ctxVal = document.getElementById("ctx-val");
+  var roKv = document.getElementById("ro-kv");
+  var roFree = document.getElementById("ro-free");
+  var caution = document.getElementById("caution");
+  var segs = {
+    weights: document.getElementById("seg-weights"),
+    kv: document.getElementById("seg-kv"),
+    runtime: document.getElementById("seg-runtime"),
+    driver: document.getElementById("seg-driver"),
+    free: document.getElementById("seg-free")
+  };
+  var tagWeights = document.getElementById("tag-weights");
+
+  function fmt(n) { return Math.round(n).toLocaleString("en-US"); }
+
+  function update(animate) {
+    var c = parseInt(slider.value, 10);
+    var kv = kvMiB(c);
+    var free = freeMiB(c);
+
+    ctxVal.textContent = fmt(c) + " tokens";
+    roKv.textContent = (kv / 1024).toFixed(2);
+    roFree.textContent = fmt(free);
+
+    segs.weights.style.width = (WEIGHTS / TOTAL * 100) + "%";
+    segs.kv.style.width = (kv / TOTAL * 100) + "%";
+    segs.runtime.style.width = (RUNTIME / TOTAL * 100) + "%";
+    segs.driver.style.width = (DRIVER / TOTAL * 100) + "%";
+    segs.free.style.width = (free / TOTAL * 100) + "%";
+
+    tagWeights.textContent = "weights " + fmt(WEIGHTS) + " MiB";
+
+    caution.hidden = free >= 500;
+  }
+
+  slider.addEventListener("input", function () { update(false); });
+  update(false);
+
+  /* ---- count-up on load (skipped under reduced motion) ---- */
+  if (!reduceMotion) {
+    var t0 = performance.now();
+    var DUR = 650;
+    function tick(now) {
+      var p = Math.min(1, (now - t0) / DUR);
+      var e = 1 - Math.pow(1 - p, 3);
+      var c = parseInt(slider.value, 10);
+      roKv.textContent = ((kvMiB(c) / 1024) * e).toFixed(2);
+      roFree.textContent = fmt(freeMiB(c) * e);
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ---- section reveals ---- */
+  if (!reduceMotion && "IntersectionObserver" in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.12 });
+    document.querySelectorAll(".reveal").forEach(function (el) { io.observe(el); });
+  } else {
+    document.querySelectorAll(".reveal").forEach(function (el) { el.classList.add("in"); });
+  }
+})();
+</script>
+</body>
+</html>
