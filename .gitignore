@@ -21,3 +21,8 @@ DEVELOPMENT_LOG.md
 *.tmp
 Thumbs.db
 .DS_Store
+
+# Landing page: only published from `main` (`docs/` is the GitHub Pages site root).
+# develop must not track it, otherwise the read-tree publishing step would either
+# delete the published page or resurrect a stale copy.
+docs/

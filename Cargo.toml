@@ -1,6 +1,6 @@
 [package]
 name = "sqwen"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 description = "Local inference engine for Qwen3.6-35B-A3B (qwen35moe): 168K-200K context on a single 24 GB GPU, with an OpenAI-compatible API"
 license = "MIT"

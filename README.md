@@ -53,21 +53,42 @@ Highlights:
 
 ## Performance
 
-Same machine, same session, **identical `ggml-cuda.dll` on both sides**, ABBA ordering, both engines
-served over HTTP, greedy, 1200 tokens generated:
+Same machine, same session, **identical `ggml-cuda.dll` on both sides**, ABBA ordering. Two blocks,
+because the two harnesses are not interchangeable:
+
+**End-to-end, both engines over HTTP, greedy, 1200 tokens generated** (measured on the 10-23 DLL):
 
 | Config | sqwen | llama.cpp | ratio |
 |---|---:|---:|---:|
 | Decode, no speculation | 128 t/s | 143 t/s | 1.12× faster |
 | Decode, MTP (1 draft / token) | **137 t/s** | 151 t/s | 1.10× faster |
-| Prefill `pp512` | ~3 000 t/s | ~3 200 t/s | ~5% faster |
-| Startup (load only) | 12.3 s | 19.2 s | — |
-| VRAM at 172K ctx | 23 676 MiB | 24 083 MiB | — |
 
-Honest summary: **prefill is at parity, memory is better, decode is ~10–12% behind**, and
-speculation does not widen it: both engines gain ~5–7% from it (ours slightly more). Speculative decoding used to be a
-*net loss* here (−13% on `n_max=2`); it is now a win, because the optimum turned out to be one draft
-token per step (see below), not the three that llama.cpp's flag suggests.
+**Bench harnesses, same model, same 2026-11-21 DLL, `KV = q4_0` + flash-attn on** (sqwen `bench` vs `llama-bench`):
+
+| Test | sqwen | llama.cpp | ratio |
+|---|---:|---:|---:|
+| Prefill `pp512` | 4 660 t/s | 4 995 ± 269 t/s | 1.07× faster |
+| Decode `tg128` | 130 t/s | 171 ± 0 t/s | 1.31× faster |
+
+| Other | sqwen | llama.cpp |
+|---|---:|---:|
+| Startup (load only) | 12.3 s | 19.2 s |
+| VRAM at 172K ctx (10-23 DLL on both sides) | 22 920 MiB | 24 083 MiB |
+
+> ⚠️ **The `tg128` row overstates the real decode gap.** sqwen's `bench` times the whole step,
+> including the 993 KB logits D2H and the sampler; `llama-bench` times neither. That overhead is
+> worth a few percent, and the HTTP rows above (1.10–1.12×) remain the honest decode figure.
+> The `pp512` row is the closest prefill comparison available and is same-DLL, same-model,
+> same-KV-type.
+
+Honest summary: **prefill improved ~27% for sqwen and ~55% for llama.cpp from the DLL upgrade
+(both gained the MoE gate/up + GLU fusion inside MMQ, and prefill was never sqwen's weak spot);
+memory is better; decode is ~10–12% behind and the DLL upgrade does not move it** (decode is
+bounded by ~2 165 kernel launches per step, and the MoE fusion that landed upstream only applies
+to batches > 1). Speculation does not widen the gap: both engines gain ~5–7% from it (ours
+slightly more). Speculative decoding used to be a *net loss* here (−13% on `n_max=2`); it is now
+a win, because the optimum turned out to be one draft token per step (see below), not the three
+that llama.cpp's flag suggests.
 
 > Measurement discipline matters: absolute numbers drift ±5% between sessions. Only same-session,
 > same-DLL A/B comparisons are trustworthy.
@@ -76,6 +97,9 @@ token per step (see below), not the three that llama.cpp's flag suggests.
 
 | Date | Change | Effect |
 |---|---|---|
+| 2026-11-21 | **Kernel census + MoE weighted-reduction fusion fix**. Added an env-gated per-dispatch census to `ggml-cuda` (patch in `patches/`) and found a decode step dispatches **1 577** kernels, not the ~2 165 previously estimated. The MoE reduction (`MUL` + 8 views + 7 adds → 1 kernel) fired 1/40 times because the allocator handed `w_norm`'s buffer to the reduction output; `ggml_set_output(w_norm)` fixes it | prefill **+3.8%** (4 384 → 4 553 t/s); reduction fusion 1 → 40 hits, `ADD` 333 → 63 per step; **decode unchanged (−0.1%)** — removing 240 kernels/step buys nothing, which retires the "decode is kernel-launch-bound" model |
+| 2026-11-21 | **Upgraded the ggml DLLs to llama.cpp 11-21** (`418fe97b5f`). Upstream pruned three ops (`ADD1`, `DIAG_MASK_INF/ZERO`) so the whole `ggml_op` enum shifted — the tail-only resync was not enough and `GgmlOp` was rebuilt from the header, with the ABI guard widened to 9 sentinels | prefill **+26–28%** (3 370 → 4 250 t/s pp512; MoE gate/up + GLU now fused **inside MMQ**, which only fires for batches > 1); decode unchanged within noise (it already had the MMVQ variant of that fusion); **−756 MiB VRAM at 172K ctx** |
+| 2026-10-27 | **Measured where decode time actually goes**: module ablation (MoE 42%, GDN 30%, full attention 9%, LM head 7%), plus CUDA-graph on/off A/B. ~~Decode is bound by per-kernel launch overhead (~3.4 µs × ~2165 kernels)~~ — **retracted 2026-11-21**: the census showed 1 577 kernels and removing 240 of them changed nothing, so decode is bound by GPU-side per-kernel work, not launch count | no speedup |
 | 2026-10-26 | **Cost-aware adaptive speculation**: chooses between 0 and 1 draft token per step; probes 5 rounds per candidate *after* 32 warm-up rounds (early drafts are poor) and compares **median** per-round throughput; `--spec-draft-n-max` default 3 → 1, new `--spec-adaptive` (on by default) | decode **+6.8%** (HTTP, 1200 tokens: 128.3 → 137.0 t/s); bench tg600: 148 vs 131 t/s (+13%); gap to llama.cpp 1.36× → 1.10× |
 | 2026-10-23 | **Upgraded the ggml DLLs to llama.cpp 10-23** (includes the `flash_attn_ext_vec` shared-memory race fix), resynced the `ggml_op` enum and added an ABI guard test | decode **+3–4%** |
 

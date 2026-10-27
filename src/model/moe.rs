@@ -121,6 +121,16 @@ pub fn build_moe_ffn<'a>(
     };
     let w_norm = g.wrap(w_norm);
 
+    // 把路由权重标记成图输出，**必须**在上面的 expand 之前做。
+    //
+    // 不加这一句：`w_norm` 只被 `weighted = mul(experts, w_norm)` 消费，allocator 会把
+    // 它的 buffer 交给归约链的最后一个 ADD 复用；ggml-cuda 的归约融合
+    // （`ggml_cuda_match_moe_weighted_reduction`，把 mul + 8 view + 7 add 折成 1 个
+    // kernel）在 `ggml_cuda_check_fusion_memory_ranges` 里检出"输出与 weights 重叠"，
+    // 于是拒绝融合 —— 每层 8 个 kernel，40 层就是 240 个（P12 census 实测：
+    // 1577 个 kernel 里 333 个是 ADD）。标记 output 后 w_norm 活到图末尾，融合命中。
+    unsafe { ffi::ggml_set_output(w_norm.ptr()) };
+
     // ---- 关键：把路由子图**提前**展开 -------------------------------------
     //
     // 对齐 llama.cpp `llama-graph.cpp:2163-2164` 的

@@ -1,0 +1,92 @@
+diff --git a/ggml/src/ggml-cuda/ggml-cuda.cu b/ggml/src/ggml-cuda/ggml-cuda.cu
+index 3e1f167e99..258a22ae61 100644
+--- a/ggml/src/ggml-cuda/ggml-cuda.cu
++++ b/ggml/src/ggml-cuda/ggml-cuda.cu
+@@ -3464,6 +3464,50 @@ static void ggml_cuda_graph_update_executable(ggml_cuda_graph_instance & instanc
+     }
+ }
+ 
++// sqwen: env-gated census of *actually dispatched* kernels. Each entry is either a
++// standalone op name ("MUL_MAT") or a fused group ("MUL_MAT_ID+GLU,..."). Used to pick
++// graph-level fusion targets from measurements instead of from node counts.
++static bool ggml_cuda_census_enabled() {
++    static const bool enabled = [] {
++        const char * e = getenv("SQWEN_KERNEL_CENSUS");
++        return e != nullptr && atoi(e) != 0;
++    }();
++    return enabled;
++}
++
++static std::map<std::string, size_t> & ggml_cuda_census_map() {
++    static std::map<std::string, size_t> census;
++    return census;
++}
++
++// per-compute-call loop iteration counter (reset at the top of graph_compute)
++static size_t g_census_iters = 0;
++
++static void ggml_cuda_census_print(const ggml_cgraph * cgraph) {
++    if (!ggml_cuda_census_enabled()) {
++        return;
++    }
++    static size_t calls = 0;
++    calls++;
++    auto & census = ggml_cuda_census_map();
++    size_t total = 0;
++    for (const auto & kv : census) {
++        total += kv.second;
++    }
++    fprintf(stderr, "[census] call#%zu n_nodes=%d iters=%zu dispatched=%zu (%zu distinct)\n",
++            calls, cgraph->n_nodes, g_census_iters, total, census.size());
++    std::vector<std::pair<size_t, std::string>> rows;
++    rows.reserve(census.size());
++    for (const auto & kv : census) {
++        rows.emplace_back(kv.second, kv.first);
++    }
++    std::sort(rows.begin(), rows.end(), [](const auto & a, const auto & b) { return a.first > b.first; });
++    for (const auto & r : rows) {
++        fprintf(stderr, "[census]   %-40s %zu\n", r.second.c_str(), r.first);
++    }
++    census.clear();
++}
++
+ // number of ggml nodes per CUDA graph chunk, 0 captures the whole ggml graph as one CUDA graph
+ static int ggml_cuda_graph_chunk_size() {
+     static const int chunk_size = [] {
+@@ -5468,6 +5512,16 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
+ 
+                 int nodes_to_skip = ggml_cuda_try_fuse(cuda_ctx, cgraph, i);
+ 
++                if (ggml_cuda_census_enabled()) {
++                    g_census_iters++;
++                    std::string sig = ggml_op_name(node->op);
++                    for (int k = 1; k <= nodes_to_skip; ++k) {
++                        sig += "+";
++                        sig += ggml_op_name(cgraph->nodes[i + k]->op);
++                    }
++                    ggml_cuda_census_map()[sig]++;
++                }
++
+                 if (nodes_to_skip != 0) {
+ #ifdef GGML_CUDA_DEBUG
+                     const int last_fused = i + nodes_to_skip;
+@@ -5516,6 +5570,7 @@ static void ggml_cuda_graph_evaluate_and_capture(ggml_backend_cuda_context * cud
+                 CUDA_CHECK(cudaGraphExecDestroy(graph->instances[i]));
+             }
+             graph->instances.resize(n_chunks);
++            ggml_cuda_census_print(cgraph);
+             graph_evaluated_or_captured = true; // CUDA graph has been captured
+ 
+             std::lock_guard<std::mutex> lock(ggml_cuda_lock);
+@@ -5559,6 +5614,11 @@ static bool ggml_cuda_graph_set_enabled(ggml_backend_cuda_context * cuda_ctx, co
+ static enum ggml_status ggml_backend_cuda_graph_compute(ggml_backend_t backend, ggml_cgraph * cgraph) {
+     ggml_backend_cuda_context * cuda_ctx = (ggml_backend_cuda_context *) backend->context;
+ 
++    if (ggml_cuda_census_enabled()) {
++        ggml_cuda_census_map().clear();
++        g_census_iters = 0;
++    }
++
+     ggml_cuda_set_device(cuda_ctx->device);
+ 
+     bool use_cuda_graph             = false;

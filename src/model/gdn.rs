@@ -348,6 +348,11 @@ pub fn build_gdn_layer<'a>(
     };
 
     // qkv_mixed 转置成 [n_tokens, conv_channels] 以便沿 dim0 拼接
+    //
+    // 注意：这层 `cont` **看着冗余，实测不能删**。llama.cpp 的 `build_conv_state`
+    // 是 transpose 后直接 concat（`ggml_concat` 按元素搬运，本身接受非连续输入），
+    // 照抄后 decode 反而慢 1~2%（交替 A/B：133.5/131.3 → 132.4/129.3 t/s）：
+    // 少了 30 个拷贝 kernel，但 concat 变成跨步读取，代价更高。负结果，勿再试。
     let qkv_t = g.wrap(unsafe { ffi::ggml_transpose(ctx, qkv_mixed.ptr()) });
     let qkv_t = g.wrap(unsafe { ffi::ggml_cont(ctx, qkv_t.ptr()) });
 

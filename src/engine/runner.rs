@@ -1738,6 +1738,28 @@ impl Engine {
                     // P8：融合潜力 —— ggml-cuda 的融合要求模式在**节点序列里相邻**。
                     // 数一下每个已知模式实际出现了多少次（每个融合点省 1~2 个 kernel）。
                     let seq = graph.op_sequence();
+                    // `SQWEN_DUMP_SEQ=<dir>`：把整条节点序列**逐行**写进文件，供
+                    // 离线核对"哪个融合模式真的能命中"（`ggml_cuda_try_fuse` 的规则
+                    // 活在 C++ 里，只能在外部按序列模拟）。prefill / decode 各一份。
+                    if let Some(dir) = std::env::var_os("SQWEN_DUMP_SEQ") {
+                        use std::sync::atomic::{AtomicUsize, Ordering};
+                        static SEQ_PREFILL: AtomicUsize = AtomicUsize::new(0);
+                        static SEQ_DECODE: AtomicUsize = AtomicUsize::new(0);
+                        let (ctr, file) = if n == 1 {
+                            (&SEQ_DECODE, "sqwen_seq_decode.txt")
+                        } else {
+                            (&SEQ_PREFILL, "sqwen_seq_prefill.txt")
+                        };
+                        if ctr.fetch_add(1, Ordering::Relaxed) == 0 {
+                            let path = std::path::Path::new(&dir).join(file);
+                            let body = seq.join("\n");
+                            if let Err(e) = std::fs::write(&path, body) {
+                                eprintln!("[graph] 序列写入失败 {}: {e}", path.display());
+                            } else {
+                                eprintln!("[graph] 节点序列已写入 {}", path.display());
+                            }
+                        }
+                    }
                     let pat = |names: &[&str]| -> usize {
                         if names.is_empty() || seq.len() < names.len() {
                             return 0;
