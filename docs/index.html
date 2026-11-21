@@ -1,19 +1,16 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>sqwen — 单张 24 GB 显卡上的 Qwen3.6-35B-A3B 推理引擎</title><link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2046%2014%22%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%2238.5%22%20height%3D%2214%22%20fill%3D%22%23c99a4b%22/%3E%3Crect%20x%3D%2238.5%22%20y%3D%220%22%20width%3D%222.7%22%20height%3D%2214%22%20fill%3D%22%236f9a8b%22/%3E%3Crect%20x%3D%2241.2%22%20y%3D%220%22%20width%3D%223.6%22%20height%3D%2214%22%20fill%3D%22%233a3e45%22/%3E%3Crect%20x%3D%2244.8%22%20y%3D%220%22%20width%3D%221.2%22%20height%3D%2214%22%20fill%3D%22%232c2f35%22/%3E%3C/svg%3E">
+<title>sqwen — Qwen3.6-35B-A3B inference engine on a single 24 GB GPU</title><link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%2046%2014%22%3E%3Crect%20x%3D%220%22%20y%3D%220%22%20width%3D%2238.5%22%20height%3D%2214%22%20fill%3D%22%23c99a4b%22/%3E%3Crect%20x%3D%2238.5%22%20y%3D%220%22%20width%3D%222.7%22%20height%3D%2214%22%20fill%3D%22%236f9a8b%22/%3E%3Crect%20x%3D%2241.2%22%20y%3D%220%22%20width%3D%223.6%22%20height%3D%2214%22%20fill%3D%22%233a3e45%22/%3E%3Crect%20x%3D%2244.8%22%20y%3D%220%22%20width%3D%221.2%22%20height%3D%2214%22%20fill%3D%22%232c2f35%22/%3E%3C/svg%3E">
 
-<meta name="description" content="sqwen 只针对 qwen35moe 架构族：整模型常驻单张 24 GB 显卡，172K–200K 上下文，OpenAI 兼容 HTTP API。把 24 GB 显存榨到位。">
+<meta name="description" content="sqwen targets only the qwen35moe architecture family: the whole model resident on a single 24 GB GPU, 172K–200K context, OpenAI-compatible HTTP API. Squeezes every drop out of 24 GB of VRAM.">
 
-<!-- 自托管字体（本地 woff2） -->
+<!-- Self-hosted fonts (local woff2) -->
 <style id="local-fonts">
 @font-face { font-family: "Bricolage Grotesque"; src: url("fonts/BricolageGrotesque-var.woff2") format("woff2"); font-weight: 200 800; font-style: normal; }
 @font-face { font-family: "JetBrains Mono"; src: url("fonts/JetBrainsMono-var.woff2") format("woff2"); font-weight: 400 800; font-style: normal; }
-@font-face { font-family: "Noto Sans SC"; src: url("fonts/NotoSansSC-subset-400.woff2") format("woff2"); font-weight: 400; font-style: normal; }
-@font-face { font-family: "Noto Sans SC"; src: url("fonts/NotoSansSC-subset-500.woff2") format("woff2"); font-weight: 500; font-style: normal; }
-@font-face { font-family: "Noto Sans SC"; src: url("fonts/NotoSansSC-subset-700.woff2") format("woff2"); font-weight: 700; font-style: normal; }
 </style>
 
 <style>
@@ -30,9 +27,9 @@
   --free: #1d2025;
   --accent: #e8b23e;
   --warn: #d97b4a;
-  --display: "Bricolage Grotesque", "Noto Sans SC", sans-serif;
+  --display: "Bricolage Grotesque", sans-serif;
   --mono: "JetBrains Mono", ui-monospace, monospace;
-  --body: "Noto Sans SC", "Bricolage Grotesque", sans-serif;
+  --body: "Bricolage Grotesque", -apple-system, "Segoe UI", sans-serif;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -72,9 +69,12 @@ header {
   font-family: var(--display); font-weight: 800; font-size: 24px;
   letter-spacing: -0.5px; color: var(--ink);
 }
+.header-right { display: flex; align-items: center; gap: 22px; }
 nav { display: flex; gap: 22px; font-size: 14px; }
 nav a { color: var(--ink-dim); font-family: var(--body); }
 nav a:hover, nav a:focus-visible { color: var(--ink); border-bottom-color: transparent; }
+.lang { font-family: var(--mono); font-size: 13px; color: var(--ink-dim); letter-spacing: 0.4px; }
+.lang:hover, .lang:focus-visible { color: var(--ink); border-bottom-color: transparent; }
 
 /* ---------- ledger (hero) ---------- */
 #ledger { padding: 64px 0 56px; }
@@ -250,29 +250,32 @@ footer .links { display: flex; gap: 18px; }
     </svg>
     <span class="wordmark">sqwen</span>
   </div>
-  <nav aria-label="页面导航">
-    <a href="#ledger">显存台账</a>
-    <a href="#math">上下文成本</a>
-    <a href="#measure">测量</a>
-    <a href="#api">接口</a>
-    <a href="#limits">取舍</a>
-    <a href="#download">下载</a>
-  </nav>
+  <div class="header-right">
+    <nav aria-label="Page navigation">
+      <a href="#ledger">VRAM ledger</a>
+      <a href="#math">Context cost</a>
+      <a href="#measure">Measurements</a>
+      <a href="#api">API</a>
+      <a href="#limits">Trade-offs</a>
+      <a href="#download">Download</a>
+    </nav>
+    <a class="lang" href="index_zh.html" title="切换到中文">中文</a>
+  </div>
 </header>
 
-<!-- ============ 1. 显存台账 ============ -->
-<section id="ledger" aria-label="显存台账">
+<!-- ============ 1. VRAM ledger ============ -->
+<section id="ledger" aria-label="VRAM ledger">
   <div class="lede reveal">
-    <p>sqwen 只针对 <code>qwen35moe</code> 一个架构族：Gated DeltaNet 线性注意力 + 全注意力 + MoE。整模型（Q4_K_M，20.2 GiB）常驻单张 24 GB 显卡，对外是 OpenAI 兼容的 HTTP API。</p>
-    <p class="claim">它不是 llama.cpp 的平替。<em>它把 24 GB 显存榨到位。</em></p>
+    <p>sqwen targets exactly one architecture family, <code>qwen35moe</code>: Gated DeltaNet linear attention + full attention + MoE. The whole model (Q4_K_M, 20.2 GiB) resides on a single 24 GB GPU and is exposed as an OpenAI-compatible HTTP API.</p>
+    <p class="claim">It is not a drop-in replacement for llama.cpp. <em>It squeezes every drop out of 24 GB of VRAM.</em></p>
   </div>
 
   <div class="membar-block reveal">
     <div class="membar-label-row">
-      <span class="membar-title">RTX 3090 · 24 GiB <span class="nowrap">显存分配</span></span>
+      <span class="membar-title">RTX 3090 · 24 GiB <span class="nowrap">VRAM allocation</span></span>
       <span class="membar-total">24,576 MiB</span>
     </div>
-    <div class="membar" role="img" aria-label="24 GiB 显存分配条形图：权重、KV cache、运行时开销、驱动保留、空闲">
+    <div class="membar" role="img" aria-label="24 GiB VRAM allocation bar chart: weights, KV cache, runtime overhead, driver reservation, free">
       <div class="seg seg-weights" id="seg-weights"><span class="seg-tag" id="tag-weights"></span></div>
       <div class="seg seg-kv" id="seg-kv"></div>
       <div class="seg seg-runtime" id="seg-runtime"></div>
@@ -280,21 +283,21 @@ footer .links { display: flex; gap: 18px; }
       <div class="seg seg-free" id="seg-free"></div>
     </div>
     <div class="membar-legend">
-      <span><span class="dot" style="background:var(--weights)"></span>权重 20.2 GiB（固定）</span>
-      <span><span class="dot" style="background:var(--kv)"></span>KV cache（随上下文增长）</span>
-      <span><span class="dot" style="background:var(--runtime)"></span>运行时开销</span>
-      <span><span class="dot" style="background:var(--driver)"></span>驱动保留</span>
-      <span><span class="dot" style="background:var(--free);border:1px solid var(--rule)"></span>空闲</span>
+      <span><span class="dot" style="background:var(--weights)"></span>Weights 20.2 GiB (fixed)</span>
+      <span><span class="dot" style="background:var(--kv)"></span>KV cache (grows with context)</span>
+      <span><span class="dot" style="background:var(--runtime)"></span>Runtime overhead</span>
+      <span><span class="dot" style="background:var(--driver)"></span>Driver reservation</span>
+      <span><span class="dot" style="background:var(--free);border:1px solid var(--rule)"></span>Free</span>
     </div>
 
     <div class="slider-row">
       <div class="slider-cell">
         <div class="slider-head">
-          <label for="ctx">上下文长度 -c</label>
+          <label for="ctx">Context length -c</label>
           <span id="ctx-val">172,032 tokens</span>
         </div>
         <input type="range" id="ctx" min="32768" max="200000" step="any" value="172032"
-               aria-label="上下文长度，单位 token，范围 32K 到 200K">
+               aria-label="Context length in tokens, range 32K to 200K">
       </div>
       <div class="readouts" role="status" aria-live="polite">
         <div class="readout">
@@ -302,36 +305,36 @@ footer .links { display: flex; gap: 18px; }
           <div class="ro-value"><span id="ro-kv">0.92</span><small> GiB</small></div>
         </div>
         <div class="readout">
-          <div class="ro-label">空闲显存</div>
+          <div class="ro-label">Free VRAM</div>
           <div class="ro-value"><span id="ro-free">530</span><small> MiB</small></div>
         </div>
         <div class="readout">
-          <div class="ro-label">172K → 200K 速度差</div>
+          <div class="ro-label">172K → 200K speed delta</div>
           <div class="ro-value">−0.4<small> %</small></div>
         </div>
       </div>
     </div>
 
     <p class="caution" id="caution" hidden>
-      空闲低于 ~500 MiB 后，再开任何 GPU 程序就会触发 WDDM 分页，速度断崖式下跌。这是 README 里的原话警告：-c 200000 能装下，但只剩 ~380 MiB。
+      Once free VRAM drops below ~500 MiB, launching any other GPU program triggers WDDM paging and throughput falls off a cliff. This is the verbatim warning from the README: -c 200000 fits, but leaves only ~380 MiB.
     </p>
 
     <p class="derived-note">
-      注：运行时开销（~2.0 GiB）与驱动保留（~370 MiB）两段是按 README 两个锚点（172K → 余 ~530 MiB；200K → 余 ~380 MiB）反推的近似值；权重与 KV 为文档原值（KV = token 数 × 5.6 KiB）。
+      Note: the runtime overhead (~2.0 GiB) and driver reservation (~370 MiB) segments are approximations back-derived from two anchors in the README (172K → ~530 MiB left; 200K → ~380 MiB left); weights and KV are the documented values (KV = tokens × 5.6 KiB).
     </p>
   </div>
 </section>
 
-<!-- ============ 2. 上下文成本 ============ -->
-<section id="math" class="block" aria-label="上下文为什么几乎不花钱">
+<!-- ============ 2. Context cost ============ -->
+<section id="math" class="block" aria-label="Why context costs almost nothing">
   <div class="reveal">
-    <p class="sec-kicker">01 · 上下文成本</p>
-    <h2>上下文为什么几乎不花钱</h2>
-    <p class="prose">KV cache 用 q4_0 量化，K/V 都是，只覆盖 10 个全注意力层：每 token 占 5.6 KiB。GDN 线性注意力层的状态是固定大小，不随序列增长。所以 <code>-c</code> 从 172K 拉到 200K，速度只慢 0.4%。</p>
-    <p class="prose">一句话：<strong>上下文吃的是显存，不是算力。</strong></p>
+    <p class="sec-kicker">01 · Context cost</p>
+    <h2>Why context costs almost nothing</h2>
+    <p class="prose">The KV cache is quantized to q4_0 — both K and V — covering only the 10 full-attention layers: 5.6 KiB per token. The state of the GDN linear-attention layers is fixed-size and does not grow with sequence length. So pulling <code>-c</code> from 172K to 200K slows things down by just 0.4%.</p>
+    <p class="prose">In one line: <strong>context eats VRAM, not compute.</strong></p>
   </div>
-  <table class="ledger reveal" aria-label="不同上下文长度下的 KV cache 与空闲显存">
-    <thead><tr><th>上下文 -c</th><th class="num">KV cache</th><th class="num">空闲显存</th></tr></thead>
+  <table class="ledger reveal" aria-label="KV cache and free VRAM at different context lengths">
+    <thead><tr><th>Context -c</th><th class="num">KV cache</th><th class="num">Free VRAM</th></tr></thead>
     <tbody>
       <tr><td>32,768</td><td class="num">179 MiB</td><td class="num">1,292 MiB</td></tr>
       <tr><td>65,536</td><td class="num">358 MiB</td><td class="num">1,113 MiB</td></tr>
@@ -342,62 +345,62 @@ footer .links { display: flex; gap: 18px; }
   </table>
 </section>
 
-<!-- ============ 3. 测量 ============ -->
-<section id="measure" class="block" aria-label="测量">
+<!-- ============ 3. Measurements ============ -->
+<section id="measure" class="block" aria-label="Measurements">
   <div class="reveal">
-    <p class="sec-kicker">02 · 测量</p>
-    <h2>投机解码：更深是净亏</h2>
-    <p class="prose">MTP 头自带起草能力。直觉上草稿越长越赚，实测相反：一个草稿 token 的边际成本 ≈ 一次完整 decode 的 60%（校验要多读它激活的专家权重），而接受率随位置衰减（pos0≈0.9，pos1≈0.7）。同机 greedy、ABBA 交替：</p>
+    <p class="sec-kicker">02 · Measurements</p>
+    <h2>Speculative decoding: deeper is a net loss</h2>
+    <p class="prose">The MTP head has built-in drafting capability. Intuition says longer drafts win; the measurements say the opposite: the marginal cost of one draft token is ≈ 60% of a full decode (verification must re-read the expert weights it activates), while acceptance rate decays with position (pos0 ≈ 0.9, pos1 ≈ 0.7). Same machine, greedy, ABBA interleaving:</p>
   </div>
-  <table class="ledger reveal" aria-label="每步草稿数与 decode 吞吐">
-    <thead><tr><th>每步草稿</th><th class="num">decode</th></tr></thead>
+  <table class="ledger reveal" aria-label="Drafts per step vs decode throughput">
+    <thead><tr><th>Drafts/step</th><th class="num">decode</th></tr></thead>
     <tbody>
-      <tr><td>0（不投机）</td><td class="num">125–130 t/s</td></tr>
+      <tr><td>0 (no speculation)</td><td class="num">125–130 t/s</td></tr>
       <tr><td>1</td><td class="num hot">145–147 t/s</td></tr>
       <tr><td>2</td><td class="num">125 t/s</td></tr>
       <tr><td>3</td><td class="num dim">106 t/s</td></tr>
     </tbody>
   </table>
   <div class="reveal">
-    <p class="prose">最优点就是<strong>每步 1 个草稿</strong>。引擎在线实测「0 / 1」两种模式并锁定胜者（<code>--spec-adaptive</code>，默认开），而不是靠拍参数：每个候选取 5 轮样本，跳过前 32 步（约 45 token）后才探测，按吞吐中位数比较。</p>
+    <p class="prose">The optimum is <strong>one draft per step</strong>. The engine measures both "0 / 1" modes online and locks in the winner (<code>--spec-adaptive</code>, on by default) instead of tuning parameters by guesswork: each candidate gets 5 rounds of samples, probing starts only after the first 32 steps (~45 tokens), compared by median throughput.</p>
   </div>
 
   <div class="reveal" style="margin-top:44px">
-    <h2 style="font-size:clamp(22px,2.6vw,28px)">对 llama.cpp：ABBA 台账</h2>
-    <p class="prose">同机、同会话、两边 <code>ggml-cuda.dll</code> 完全相同、ABBA 交叉、都走 HTTP server、greedy、生成 1200 token：</p>
+    <h2 style="font-size:clamp(22px,2.6vw,28px)">vs llama.cpp: the ABBA ledger</h2>
+    <p class="prose">Same machine, same session, byte-identical <code>ggml-cuda.dll</code> on both sides, ABBA interleaving, both over the HTTP server, greedy, generating 1200 tokens:</p>
   </div>
-  <table class="ledger reveal" aria-label="sqwen 与 llama.cpp 对照">
-    <thead><tr><th>项目</th><th class="num">sqwen</th><th class="num">llama.cpp</th><th class="num">比值</th></tr></thead>
+  <table class="ledger reveal" aria-label="sqwen vs llama.cpp">
+    <thead><tr><th>Item</th><th class="num">sqwen</th><th class="num">llama.cpp</th><th class="num">Ratio</th></tr></thead>
     <tbody>
-      <tr><td>Decode，MTP（每步 1 草稿）</td><td class="num">137 t/s</td><td class="num">151 t/s</td><td class="num dim">对方快 1.10×</td></tr>
-      <tr><td>Prefill pp512</td><td class="num">~3,000 t/s</td><td class="num">~3,200 t/s</td><td class="num dim">对方快 ~5%</td></tr>
-      <tr><td>启动（纯加载）</td><td class="num hot">12.3 s</td><td class="num">19.2 s</td><td class="num dim">—</td></tr>
-      <tr><td>172K 上下文显存</td><td class="num hot">23,676 MiB</td><td class="num">24,083 MiB</td><td class="num dim">—</td></tr>
+      <tr><td>Decode, MTP (1 draft/step)</td><td class="num">137 t/s</td><td class="num">151 t/s</td><td class="num dim">1.10× faster</td></tr>
+      <tr><td>Prefill pp512</td><td class="num">~3,000 t/s</td><td class="num">~3,200 t/s</td><td class="num dim">~5% faster</td></tr>
+      <tr><td>Startup (load only)</td><td class="num hot">12.3 s</td><td class="num">19.2 s</td><td class="num dim">—</td></tr>
+      <tr><td>VRAM at 172K context</td><td class="num hot">23,676 MiB</td><td class="num">24,083 MiB</td><td class="num dim">—</td></tr>
     </tbody>
   </table>
-  <p class="note reveal">测量纪律：跨会话的绝对值会漂 ±5%，只有同会话、同 DLL 的 A/B 才可信。decode 落后 ~10%，prefill 打平，显存更省；投机解码对两边收益相当（各 ~+7%），差距没有被投机放大。</p>
+  <p class="note reveal">Measurement discipline: absolute values drift ±5% across sessions; only same-session, same-DLL A/B comparisons are trustworthy. decode trails by ~10%, prefill is a tie, VRAM is leaner; speculative decoding pays off about equally on both sides (~+7% each), and the gap is not amplified by speculation.</p>
 </section>
 
-<!-- ============ 4. 接口 ============ -->
-<section id="api" class="block" aria-label="接口">
+<!-- ============ 4. API ============ -->
+<section id="api" class="block" aria-label="API">
   <div class="reveal">
-    <p class="sec-kicker">03 · 接口</p>
-    <h2>OpenAI 兼容端点</h2>
+    <p class="sec-kicker">03 · API</p>
+    <h2>OpenAI-compatible endpoints</h2>
   </div>
-  <table class="ledger reveal" aria-label="HTTP 端点列表">
-    <thead><tr><th>端点</th><th>说明</th></tr></thead>
+  <table class="ledger reveal" aria-label="HTTP endpoint list">
+    <thead><tr><th>Endpoint</th><th>Description</th></tr></thead>
     <tbody>
-      <tr><td>POST /v1/chat/completions</td><td class="dim">OpenAI 兼容；流式 + 非流式，tool calling</td></tr>
-      <tr><td>GET /v1/models · GET /health</td><td class="dim">列模型 / 就绪检查（端口在模型预热完成后才绑定）</td></tr>
-      <tr><td>GET /</td><td class="dim">内置 WebUI</td></tr>
-      <tr><td>POST /v1/bench</td><td class="dim">快速跑分端点</td></tr>
+      <tr><td>POST /v1/chat/completions</td><td class="dim">OpenAI compatible; streaming + non-streaming, tool calling</td></tr>
+      <tr><td>GET /v1/models · GET /health</td><td class="dim">list models / readiness check (port binds only after model warmup completes)</td></tr>
+      <tr><td>GET /</td><td class="dim">built-in WebUI</td></tr>
+      <tr><td>POST /v1/bench</td><td class="dim">quick benchmark endpoint</td></tr>
     </tbody>
   </table>
   <div class="reveal">
-    <p class="prose"><strong>Tool calling</strong>：工具定义渲染进 chat template，生成后从文本里抽 <code>tool_call</code>——与 llama.cpp 同一条路线。流式下工具调用在最后一个分片整块发出，支持多轮 <code>role: "tool"</code> 结果。</p>
-    <p class="prose"><strong>Prompt cache</strong>：前缀复用 + GDN 状态检查点。多轮对话首字延迟约好 11 倍。</p>
+    <p class="prose"><strong>Tool calling</strong>: tool definitions are rendered into the chat template, and <code>tool_call</code>s are extracted from the text after generation — the same route as llama.cpp. In streaming mode, tool calls are emitted in one block in the final chunk, with multi-turn <code>role: "tool"</code> results supported.</p>
+    <p class="prose"><strong>Prompt cache</strong>: prefix reuse + GDN state checkpoints. First-token latency on multi-turn conversations is about 11× better.</p>
   </div>
-  <pre class="cmd reveal" aria-label="实际在用的 server 启动命令">sqwen.exe server "E:\models\BigBang-v1.i1-Q4_K_M.gguf" \
+  <pre class="cmd reveal" aria-label="The server command actually in use">sqwen.exe server "E:\models\BigBang-v1.i1-Q4_K_M.gguf" \
   --port 8100 -c 172032 -b 2048 -u 512 -t 8 \
   --template "E:\models\chat_template_v22.5.jinja" \
   --spec-type draft-mtp \
@@ -405,43 +408,43 @@ footer .links { display: flex; gap: 18px; }
   --repeat-penalty 1.08 --repeat-last-n 128 \
   --reasoning on --reasoning-effort medium --reasoning-budget 2048 \
   --reasoning-format deepseek --queue-capacity 8
-<span class="c"># --repeat-penalty 1.08 --repeat-last-n 128 不要省：默认 1.0 等于关闭，
-# 配低温度时模型一旦开始复读就自己停不下来（agent 场景表现为"卡住"）</span></pre>
+<span class="c"># --repeat-penalty 1.08 --repeat-last-n 128 — do not skip these: the default 1.0 turns it off,
+# and at low temperature the model cannot stop repeating once it starts (in agent scenarios this looks like "hanging")</span></pre>
 </section>
 
-<!-- ============ 5. 取舍 ============ -->
-<section id="limits" class="block" aria-label="有意的取舍">
+<!-- ============ 5. Trade-offs ============ -->
+<section id="limits" class="block" aria-label="Deliberate trade-offs">
   <div class="reveal">
-    <p class="sec-kicker">04 · 取舍</p>
-    <h2>都是有意的取舍</h2>
+    <p class="sec-kicker">04 · Trade-offs</p>
+    <h2>All deliberate trade-offs</h2>
     <ul class="limits">
-      <li><b>串行</b>请求完全串行（单引擎）；超过 --queue-capacity 返回 429。</li>
-      <li><b>参数</b>不支持 stop、n&gt;1、logprobs、response_format、JSON Schema 约束解码。</li>
-      <li><b>tool_choice</b>"required" 和指定函数名不强制，只尊重 "none"。</li>
-      <li><b>工具 JSON</b>偶尔带未转义引号：服务端修常见形态，修不好就回退成正文，而不是发出坏调用。</li>
-      <li><b>平台</b>Windows 构建（MSVC + CUDA 12.5），其它平台未验证。</li>
-      <li><b>范围</b>只支持 qwen35moe 一个架构族；早期项目，不是 llama.cpp 的平替。</li>
+      <li><b>Serial</b>Requests are fully serial (single engine); beyond --queue-capacity you get a 429.</li>
+      <li><b>Parameters</b>No support for stop, n&gt;1, logprobs, response_format, or JSON Schema constrained decoding.</li>
+      <li><b>tool_choice</b>"required" and named functions are not enforced; only "none" is honored.</li>
+      <li><b>Tool JSON</b>Occasionally contains unescaped quotes: the server fixes common shapes, and falls back to plain text rather than emitting a broken call when it can't.</li>
+      <li><b>Platform</b>Windows build (MSVC + CUDA 12.5); other platforms unverified.</li>
+      <li><b>Scope</b>Supports only the qwen35moe architecture family; an early-stage project, not a drop-in replacement for llama.cpp.</li>
     </ul>
   </div>
 </section>
 
-<!-- ============ 6. 下载 ============ -->
-<section id="download" class="block" aria-label="下载">
+<!-- ============ 6. Download ============ -->
+<section id="download" class="block" aria-label="Download">
   <div class="reveal">
-    <p class="sec-kicker">05 · 下载</p>
-    <h2>v0.1.1</h2>
+    <p class="sec-kicker">05 · Download</p>
+    <h2>v0.2.0</h2>
     <div class="dl-row">
-      <a class="btn" href="https://github.com/SunixLiu/sqwen-moe-3090/releases/download/v0.1.1/sqwen-v0.1.1-windows-x64.zip">下载 v0.1.1 · Windows x64</a>
-      <span class="dl-meta">73.5 MB zip：exe + 4 个 ggml DLL + cudart + QUICKSTART.txt<br>解压即用 · MIT 许可</span>
+      <a class="btn" href="https://github.com/SunixLiu/sqwen-moe-3090/releases/download/v0.2.0/sqwen-v0.2.0-windows-x64.zip">Download v0.2.0 · Windows x64</a>
+      <span class="dl-meta">96.6 MB zip: exe + 4 ggml DLLs + cudart + QUICKSTART.txt<br>unzip and run · MIT license</span>
     </div>
   </div>
 </section>
 
 <footer>
-  <span>sqwen · 单张 24 GB 显卡上的 Qwen3.6-35B-A3B 推理引擎</span>
+  <span>sqwen · Qwen3.6-35B-A3B inference engine on a single 24 GB GPU</span>
   <span class="links">
-    <a href="https://github.com/SunixLiu/sqwen-moe-3090">GitHub 仓库</a>
-    <a href="https://github.com/SunixLiu/sqwen-moe-3090/blob/main/README.zh-CN.md">中文文档</a>
+    <a href="https://github.com/SunixLiu/sqwen-moe-3090">GitHub repo</a>
+    <a href="https://github.com/SunixLiu/sqwen-moe-3090/blob/main/README.md">English docs</a>
     <a href="https://github.com/SunixLiu/sqwen-moe-3090/blob/main/LICENSE">MIT</a>
   </span>
 </footer>
